@@ -3,17 +3,17 @@
 //  تنبيهات السعر المتكررة كل خطوة سعرية (مثال: كل 100 دولار)
 //  Recurring Step Price Alerts
 //
-//  يصدر تنبيهاً كلما تحرّك السعر بمقدار "الخطوة" صعوداً أو هبوطاً،
-//  ويصلك إشعار Push على تطبيق TradingView في جوالك.
-//  ويبيّن في كل تنبيه: السعر الحالي + كم تحرّك منذ آخر تنبيه + كم دقيقة مرّت.
-//  مع إمكانية تحديد أقل فاصل زمني بين التنبيهات لتقليل الإزعاج.
+//  يصدر تنبيهاً كلما عبر السعر مضاعفاً جديداً للخطوة (100, 200, ...)
+//  صعوداً أو هبوطاً، ويبيّن المستوى الذي وصله ومقدار التغيّر بمضاعفات نظيفة.
+//  لو قفز السعر عدة خطوات بسرعة يجمّعها في تنبيه واحد (مثال +300$).
+//  ويمكن تحديد أقل فاصل زمني بين التنبيهات لتقليل الإزعاج.
 // =============================================================
 indicator("تنبيهات السعر كل خطوة | Recurring Step Alerts", overlay=true)
 
 // ---------------------- الإعدادات ----------------------
 g1 = "الإعدادات الرئيسية"
 step     = input.float(100.0, "مقدار الخطوة (دولار)", minval=0.000001, group=g1,
-                       tooltip="كل ما تحرّك السعر بهذا المقدار يصدر تنبيه. غيّره مثلاً إلى 50 أو 200.")
+                       tooltip="كل ما عبر السعر هذا المقدار يصدر تنبيه. غيّره مثلاً إلى 50 أو 200.")
 dirOpt   = input.string("الاتجاهين", "اتجاه التنبيه", options=["الاتجاهين","صعود فقط","هبوط فقط"], group=g1)
 priceSrc = input.source(close, "مصدر السعر", group=g1)
 
@@ -23,7 +23,7 @@ anchorPx  = input.float(0.0, "سعر البداية", group=g2)
 
 g3 = "إعدادات التنبيه"
 minGapMin = input.int(0, "أقل فاصل بين التنبيهات (دقائق)", minval=0, group=g3,
-                      tooltip="0 = بدون قيود. لو حطيت 5 مثلاً، ما يجيك أكثر من تنبيه كل 5 دقائق، ويجمّع الحركة في تنبيه واحد.")
+                      tooltip="0 = بدون قيود. لو حطيت 5 مثلاً، ما يجيك أكثر من تنبيه كل 5 دقائق ويجمّع الحركة.")
 freqOpt   = input.string("مرة لكل شمعة", "تكرار التنبيه",
                        options=["مرة لكل شمعة","عند إغلاق الشمعة","كل تحرك (فوري)"], group=g3)
 
@@ -35,43 +35,36 @@ af = freqOpt == "مرة لكل شمعة" ? alert.freq_once_per_bar
    : freqOpt == "عند إغلاق الشمعة" ? alert.freq_once_per_bar_close
    :                                 alert.freq_all
 
-var float baseLevel      = na   // المستوى المرجعي الحالي
-var float lastAlertPrice = na   // السعر عند آخر تنبيه فعلي
-var int   lastAlertTime  = na   // وقت آخر تنبيه فعلي (ميلي ثانية)
+var float lastLevel     = na   // آخر مستوى تنبيه (مضاعف نظيف للخطوة)
+var int   lastAlertTime = na   // وقت آخر تنبيه (ميلي ثانية)
 
-if na(baseLevel)
-    startPx        = (useAnchor and anchorPx > 0) ? anchorPx : priceSrc
-    baseLevel      := math.floor(startPx / step) * step
-    lastAlertPrice := startPx
+if na(lastLevel)
+    startPx   = (useAnchor and anchorPx > 0) ? anchorPx : priceSrc
+    lastLevel := math.round(startPx / step) * step   // محاذاة لأقرب مضاعف للخطوة
 
 allowUp = dirOpt != "هبوط فقط"
 allowDn = dirOpt != "صعود فقط"
 
-// هل تجاوز السعر خطوة كاملة عن المرجع؟
-crossedUp = priceSrc >= baseLevel + step
-crossedDn = priceSrc <= baseLevel - step
-moved     = crossedUp or crossedDn
+// كم خطوة كاملة ابتعد السعر عن آخر مستوى تنبيه
+stepsAway = math.floor(math.abs(priceSrc - lastLevel) / step)
+gapOk     = minGapMin == 0 or na(lastAlertTime) or (timenow - lastAlertTime) >= minGapMin * 60000
 
-// التحقق من الفاصل الزمني المسموح
-gapOk = minGapMin == 0 or na(lastAlertTime) or (timenow - lastAlertTime) >= minGapMin * 60000
-
-if moved and gapOk
-    diff      = priceSrc - lastAlertPrice                         // كم تحرّك منذ آخر تنبيه
-    isUp      = diff >= 0
+if stepsAway >= 1 and gapOk
+    dir       = priceSrc > lastLevel ? 1 : -1
+    newLevel  = lastLevel + dir * stepsAway * step    // المستوى الجديد (مضاعف نظيف)
+    diffPrice = newLevel - lastLevel                  // التغيّر بمضاعفات نظيفة (±100, ±200 ...)
+    isUp      = dir > 0
     allowDir  = (isUp and allowUp) or (not isUp and allowDn)
     if allowDir
-        // ----- رسالة من سطر واحد واضحة على شاشة القفل بدون فتح -----
         head     = isUp ? "🟢▲" : "🔴▼"
-        priceStr = str.tostring(priceSrc, format.mintick)
-        diffStr  = (isUp ? "+" : "") + str.tostring(diff, format.mintick)
-        msg      = head + " " + syminfo.ticker + "  " + priceStr + "$  (" + diffStr + "$)"
+        levelStr = str.tostring(newLevel,  format.mintick)
+        diffStr  = (isUp ? "+" : "") + str.tostring(diffPrice, format.mintick)
+        msg      = head + " " + syminfo.ticker + "  " + levelStr + "$  (" + diffStr + "$)"
         alert(msg, af)
-        lastAlertPrice := priceSrc
-        lastAlertTime  := timenow
-    // إعادة محاذاة المرجع بعد التجاوز (يدعم القفزات الكبيرة في شمعة واحدة)
-    baseLevel := math.floor(priceSrc / step) * step
+        lastAlertTime := timenow
+    lastLevel := newLevel
 
 // ---------------------- العرض ----------------------
-plot(showLines ? baseLevel + step : na, "هدف صعود", color = color.new(color.green, 0), linewidth = 1, style = plot.style_stepline)
-plot(showLines ? baseLevel - step : na, "هدف هبوط", color = color.new(color.red,   0), linewidth = 1, style = plot.style_stepline)
-plot(showLines ? baseLevel        : na, "المرجع",   color = color.new(color.gray, 40), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? lastLevel + step : na, "هدف صعود", color = color.new(color.green, 0), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? lastLevel - step : na, "هدف هبوط", color = color.new(color.red,   0), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? lastLevel        : na, "المستوى",  color = color.new(color.gray, 40), linewidth = 1, style = plot.style_stepline)
