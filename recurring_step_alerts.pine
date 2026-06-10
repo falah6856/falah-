@@ -58,11 +58,12 @@ crossedUp = priceSrc >= upTarget
 crossedDn = priceSrc <= dnTarget
 
 // إطلاق التنبيهات (تصل كإشعار على جوالك)
+// رسالة مختصرة: سهم الاتجاه + اسم العملة + السعر
 if crossedUp and allowUp
-    alert("🔼 ارتفع السعر إلى " + str.tostring(upTarget) + "  (+" + str.tostring(step) + ")", af)
+    alert("🟢🔼 " + syminfo.ticker + "  " + str.tostring(upTarget) + "$", af)
 
 if crossedDn and allowDn
-    alert("🔽 انخفض السعر إلى " + str.tostring(dnTarget) + "  (-" + str.tostring(step) + ")", af)
+    alert("🔴🔽 " + syminfo.ticker + "  " + str.tostring(dnTarget) + "$", af)
 
 // إعادة محاذاة المستوى المرجعي بعد أي تجاوز (يدعم القفزات الكبيرة في شمعة واحدة)
 if crossedUp or crossedDn
