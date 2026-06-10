@@ -1,0 +1,74 @@
+//@version=6
+// =============================================================
+//  تنبيهات السعر المتكررة كل خطوة سعرية (مثال: كل 100 دولار)
+//  Recurring Step Price Alerts
+//
+//  الفكرة: كلما تحرّك السعر بمقدار "الخطوة" التي تحددها (افتراضياً 100$)
+//  صعوداً أو هبوطاً، يُصدر السكربت تنبيهاً يصلك على تطبيق TradingView
+//  في جوالك (iPhone) كإشعار Push.
+//
+//  مثال: السعر الآن 61100 → عند بلوغ 61200 تنبيه، وعند 61300 تنبيه،
+//  وعند 61000 تنبيه هبوط... وهكذا بشكل متكرر تلقائياً.
+// =============================================================
+indicator("تنبيهات السعر كل خطوة | Recurring Step Alerts", overlay=true)
+
+// ---------------------- الإعدادات (تتحكم بها بالكامل) ----------------------
+g_main   = "الإعدادات الرئيسية"
+step     = input.float(100.0, "مقدار الخطوة (دولار)", minval=0.000001, group=g_main,
+                       tooltip="كل ما تحرّك السعر بهذا المقدار يصدر تنبيه. غيّره مثلاً إلى 50 أو 200 أو 0.5 حسب العملة.")
+dirOpt   = input.string("الاتجاهين", "اتجاه التنبيه", options=["الاتجاهين", "صعود فقط", "هبوط فقط"], group=g_main,
+                       tooltip="اختر هل تريد تنبيه عند الصعود فقط، الهبوط فقط، أو كليهما.")
+priceSrc = input.source(close, "مصدر السعر", group=g_main,
+                       tooltip="السعر المستخدم في الحساب. close = سعر الإغلاق/السعر الحالي.")
+
+g_anchor = "نقطة البداية المرجعية"
+useAnchor = input.bool(false, "تحديد سعر بداية يدوي", group=g_anchor,
+                       tooltip="إذا فعّلته، تبدأ الشبكة من السعر الذي تحدده بالأسفل بدلاً من السعر الحالي.")
+anchorPx  = input.float(0.0, "سعر البداية", group=g_anchor,
+                       tooltip="مثال: 61100. يُستخدم فقط عند تفعيل الخيار أعلاه.")
+
+g_alert  = "إعدادات التنبيه"
+freqOpt  = input.string("مرة لكل شمعة", "تكرار التنبيه",
+                       options=["مرة لكل شمعة", "عند إغلاق الشمعة", "كل تحرك (فوري)"], group=g_alert,
+                       tooltip="مرة لكل شمعة = أدق وأهدأ. كل تحرك = أسرع لكن قد يتكرر كثيراً.")
+
+g_visual = "العرض على الشارت"
+showLines = input.bool(true, "إظهار خطوط المستويات", group=g_visual)
+
+// ---------------------- منطق العمل ----------------------
+// تحويل خيار التكرار إلى ثابت Pine
+af = freqOpt == "مرة لكل شمعة"  ? alert.freq_once_per_bar
+   : freqOpt == "عند إغلاق الشمعة" ? alert.freq_once_per_bar_close
+   :                                 alert.freq_all
+
+// المستوى المرجعي: نُحاذيه إلى أقرب مضاعف للخطوة أسفل السعر
+var float baseLevel = na
+if na(baseLevel)
+    startPx   = (useAnchor and anchorPx > 0) ? anchorPx : priceSrc
+    baseLevel := math.floor(startPx / step) * step
+
+// الهدف القادم صعوداً وهبوطاً
+upTarget = baseLevel + step
+dnTarget = baseLevel - step
+
+allowUp = dirOpt != "هبوط فقط"
+allowDn = dirOpt != "صعود فقط"
+
+crossedUp = priceSrc >= upTarget
+crossedDn = priceSrc <= dnTarget
+
+// إطلاق التنبيهات (تصل كإشعار على جوالك)
+if crossedUp and allowUp
+    alert("🔼 ارتفع السعر إلى " + str.tostring(upTarget) + "  (+" + str.tostring(step) + ")", af)
+
+if crossedDn and allowDn
+    alert("🔽 انخفض السعر إلى " + str.tostring(dnTarget) + "  (-" + str.tostring(step) + ")", af)
+
+// إعادة محاذاة المستوى المرجعي بعد أي تجاوز (يدعم القفزات الكبيرة في شمعة واحدة)
+if crossedUp or crossedDn
+    baseLevel := math.floor(priceSrc / step) * step
+
+// ---------------------- العرض المرئي ----------------------
+plot(showLines ? upTarget   : na, "هدف صعود", color = color.new(color.green, 0), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? dnTarget   : na, "هدف هبوط", color = color.new(color.red,   0), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? baseLevel  : na, "المرجع",   color = color.new(color.gray,  40), linewidth = 1, style = plot.style_stepline)
