@@ -3,73 +3,73 @@
 //  تنبيهات السعر المتكررة كل خطوة سعرية (مثال: كل 100 دولار)
 //  Recurring Step Price Alerts
 //
-//  الفكرة: كلما تحرّك السعر بمقدار "الخطوة" التي تحددها (افتراضياً 100$)
-//  صعوداً أو هبوطاً، يُصدر السكربت تنبيهاً يصلك على تطبيق TradingView
-//  في جوالك (iPhone) كإشعار Push.
-//
-//  مثال: السعر الآن 61100 → عند بلوغ 61200 تنبيه، وعند 61300 تنبيه،
-//  وعند 61000 تنبيه هبوط... وهكذا بشكل متكرر تلقائياً.
+//  يصدر تنبيهاً كلما تحرّك السعر بمقدار "الخطوة" صعوداً أو هبوطاً،
+//  ويصلك إشعار Push على تطبيق TradingView في جوالك.
+//  ويبيّن في كل تنبيه: السعر الحالي + كم تحرّك منذ آخر تنبيه + كم دقيقة مرّت.
+//  مع إمكانية تحديد أقل فاصل زمني بين التنبيهات لتقليل الإزعاج.
 // =============================================================
 indicator("تنبيهات السعر كل خطوة | Recurring Step Alerts", overlay=true)
 
-// ---------------------- الإعدادات (تتحكم بها بالكامل) ----------------------
-g_main   = "الإعدادات الرئيسية"
-step     = input.float(100.0, "مقدار الخطوة (دولار)", minval=0.000001, group=g_main,
-                       tooltip="كل ما تحرّك السعر بهذا المقدار يصدر تنبيه. غيّره مثلاً إلى 50 أو 200 أو 0.5 حسب العملة.")
-dirOpt   = input.string("الاتجاهين", "اتجاه التنبيه", options=["الاتجاهين", "صعود فقط", "هبوط فقط"], group=g_main,
-                       tooltip="اختر هل تريد تنبيه عند الصعود فقط، الهبوط فقط، أو كليهما.")
-priceSrc = input.source(close, "مصدر السعر", group=g_main,
-                       tooltip="السعر المستخدم في الحساب. close = سعر الإغلاق/السعر الحالي.")
+// ---------------------- الإعدادات ----------------------
+g1 = "الإعدادات الرئيسية"
+step     = input.float(100.0, "مقدار الخطوة (دولار)", minval=0.000001, group=g1,
+                       tooltip="كل ما تحرّك السعر بهذا المقدار يصدر تنبيه. غيّره مثلاً إلى 50 أو 200.")
+dirOpt   = input.string("الاتجاهين", "اتجاه التنبيه", options=["الاتجاهين","صعود فقط","هبوط فقط"], group=g1)
+priceSrc = input.source(close, "مصدر السعر", group=g1)
 
-g_anchor = "نقطة البداية المرجعية"
-useAnchor = input.bool(false, "تحديد سعر بداية يدوي", group=g_anchor,
-                       tooltip="إذا فعّلته، تبدأ الشبكة من السعر الذي تحدده بالأسفل بدلاً من السعر الحالي.")
-anchorPx  = input.float(0.0, "سعر البداية", group=g_anchor,
-                       tooltip="مثال: 61100. يُستخدم فقط عند تفعيل الخيار أعلاه.")
+g2 = "نقطة البداية"
+useAnchor = input.bool(false, "تحديد سعر بداية يدوي", group=g2)
+anchorPx  = input.float(0.0, "سعر البداية", group=g2)
 
-g_alert  = "إعدادات التنبيه"
-freqOpt  = input.string("مرة لكل شمعة", "تكرار التنبيه",
-                       options=["مرة لكل شمعة", "عند إغلاق الشمعة", "كل تحرك (فوري)"], group=g_alert,
-                       tooltip="مرة لكل شمعة = أدق وأهدأ. كل تحرك = أسرع لكن قد يتكرر كثيراً.")
+g3 = "إعدادات التنبيه"
+minGapMin = input.int(0, "أقل فاصل بين التنبيهات (دقائق)", minval=0, group=g3,
+                      tooltip="0 = بدون قيود. لو حطيت 5 مثلاً، ما يجيك أكثر من تنبيه كل 5 دقائق، ويجمّع الحركة في تنبيه واحد.")
+freqOpt   = input.string("مرة لكل شمعة", "تكرار التنبيه",
+                       options=["مرة لكل شمعة","عند إغلاق الشمعة","كل تحرك (فوري)"], group=g3)
 
-g_visual = "العرض على الشارت"
-showLines = input.bool(true, "إظهار خطوط المستويات", group=g_visual)
+g4 = "العرض"
+showLines = input.bool(true, "إظهار خطوط المستويات", group=g4)
 
-// ---------------------- منطق العمل ----------------------
-// تحويل خيار التكرار إلى ثابت Pine
-af = freqOpt == "مرة لكل شمعة"  ? alert.freq_once_per_bar
+// ---------------------- المنطق ----------------------
+af = freqOpt == "مرة لكل شمعة" ? alert.freq_once_per_bar
    : freqOpt == "عند إغلاق الشمعة" ? alert.freq_once_per_bar_close
    :                                 alert.freq_all
 
-// المستوى المرجعي: نُحاذيه إلى أقرب مضاعف للخطوة أسفل السعر
-var float baseLevel = na
-if na(baseLevel)
-    startPx   = (useAnchor and anchorPx > 0) ? anchorPx : priceSrc
-    baseLevel := math.floor(startPx / step) * step
+var float baseLevel      = na   // المستوى المرجعي الحالي
+var float lastAlertPrice = na   // السعر عند آخر تنبيه فعلي
+var int   lastAlertTime  = na   // وقت آخر تنبيه فعلي (ميلي ثانية)
 
-// الهدف القادم صعوداً وهبوطاً
-upTarget = baseLevel + step
-dnTarget = baseLevel - step
+if na(baseLevel)
+    startPx        = (useAnchor and anchorPx > 0) ? anchorPx : priceSrc
+    baseLevel      := math.floor(startPx / step) * step
+    lastAlertPrice := startPx
 
 allowUp = dirOpt != "هبوط فقط"
 allowDn = dirOpt != "صعود فقط"
 
-crossedUp = priceSrc >= upTarget
-crossedDn = priceSrc <= dnTarget
+// هل تجاوز السعر خطوة كاملة عن المرجع؟
+crossedUp = priceSrc >= baseLevel + step
+crossedDn = priceSrc <= baseLevel - step
+moved     = crossedUp or crossedDn
 
-// إطلاق التنبيهات (تصل كإشعار على جوالك)
-// رسالة مختصرة: سهم الاتجاه + اسم العملة + السعر
-if crossedUp and allowUp
-    alert("🟢🔼 " + syminfo.ticker + "  " + str.tostring(upTarget) + "$", af)
+// التحقق من الفاصل الزمني المسموح
+gapOk = minGapMin == 0 or na(lastAlertTime) or (timenow - lastAlertTime) >= minGapMin * 60000
 
-if crossedDn and allowDn
-    alert("🔴🔽 " + syminfo.ticker + "  " + str.tostring(dnTarget) + "$", af)
-
-// إعادة محاذاة المستوى المرجعي بعد أي تجاوز (يدعم القفزات الكبيرة في شمعة واحدة)
-if crossedUp or crossedDn
+if moved and gapOk
+    diff      = priceSrc - lastAlertPrice                         // كم تحرّك منذ آخر تنبيه
+    isUp      = diff >= 0
+    arrow     = isUp ? "🟢🔼" : "🔴🔽"
+    sign      = isUp ? "+" : ""
+    allowDir  = (isUp and allowUp) or (not isUp and allowDn)
+    minsTxt   = na(lastAlertTime) ? "" : "  ⏱" + str.tostring(math.round((timenow - lastAlertTime) / 60000)) + "د"
+    if allowDir
+        alert(arrow + " " + syminfo.ticker + "  " + str.tostring(priceSrc) + "$  (" + sign + str.tostring(diff) + "$ منذ آخر تنبيه)" + minsTxt, af)
+        lastAlertPrice := priceSrc
+        lastAlertTime  := timenow
+    // إعادة محاذاة المرجع بعد التجاوز (يدعم القفزات الكبيرة في شمعة واحدة)
     baseLevel := math.floor(priceSrc / step) * step
 
-// ---------------------- العرض المرئي ----------------------
-plot(showLines ? upTarget   : na, "هدف صعود", color = color.new(color.green, 0), linewidth = 1, style = plot.style_stepline)
-plot(showLines ? dnTarget   : na, "هدف هبوط", color = color.new(color.red,   0), linewidth = 1, style = plot.style_stepline)
-plot(showLines ? baseLevel  : na, "المرجع",   color = color.new(color.gray,  40), linewidth = 1, style = plot.style_stepline)
+// ---------------------- العرض ----------------------
+plot(showLines ? baseLevel + step : na, "هدف صعود", color = color.new(color.green, 0), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? baseLevel - step : na, "هدف هبوط", color = color.new(color.red,   0), linewidth = 1, style = plot.style_stepline)
+plot(showLines ? baseLevel        : na, "المرجع",   color = color.new(color.gray, 40), linewidth = 1, style = plot.style_stepline)
