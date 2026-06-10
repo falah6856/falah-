@@ -58,12 +58,17 @@ gapOk = minGapMin == 0 or na(lastAlertTime) or (timenow - lastAlertTime) >= minG
 if moved and gapOk
     diff      = priceSrc - lastAlertPrice                         // كم تحرّك منذ آخر تنبيه
     isUp      = diff >= 0
-    arrow     = isUp ? "🟢🔼" : "🔴🔽"
-    sign      = isUp ? "+" : ""
     allowDir  = (isUp and allowUp) or (not isUp and allowDn)
-    minsTxt   = na(lastAlertTime) ? "" : "  ⏱" + str.tostring(math.round((timenow - lastAlertTime) / 60000)) + "د"
     if allowDir
-        alert(arrow + " " + syminfo.ticker + "  " + str.tostring(priceSrc) + "$  (" + sign + str.tostring(diff) + "$ منذ آخر تنبيه)" + minsTxt, af)
+        // ----- تصميم الرسالة الاحترافي -----
+        head     = isUp ? "🟢 ▲ صعود" : "🔴 ▼ هبوط"
+        priceStr = str.tostring(priceSrc, format.mintick)
+        diffStr  = (isUp ? "+" : "") + str.tostring(diff, format.mintick)
+        timeStr  = na(lastAlertTime) ? "" : "\n⏱️ منذ " + str.tostring(math.round((timenow - lastAlertTime) / 60000)) + " دقيقة"
+        msg      = head + "  |  " + syminfo.ticker + "\n" +
+                   "💰 السعر: " + priceStr + " $\n" +
+                   "📊 التغيّر: " + diffStr + " $ منذ آخر تنبيه" + timeStr
+        alert(msg, af)
         lastAlertPrice := priceSrc
         lastAlertTime  := timenow
     // إعادة محاذاة المرجع بعد التجاوز (يدعم القفزات الكبيرة في شمعة واحدة)
