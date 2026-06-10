@@ -57,8 +57,8 @@ if stepsAway >= 1 and gapOk
     allowDir  = (isUp and allowUp) or (not isUp and allowDn)
     if allowDir
         head     = isUp ? "🟢▲" : "🔴▼"
-        levelStr = str.tostring(newLevel,  format.mintick)
-        diffStr  = (isUp ? "+" : "") + str.tostring(diffPrice, format.mintick)
+        levelStr = str.tostring(newLevel)
+        diffStr  = (isUp ? "+" : "") + str.tostring(diffPrice)
         msg      = head + " " + syminfo.ticker + "  " + levelStr + "$  (" + diffStr + "$)"
         alert(msg, af)
         lastAlertTime := timenow
