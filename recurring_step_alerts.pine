@@ -60,14 +60,11 @@ if moved and gapOk
     isUp      = diff >= 0
     allowDir  = (isUp and allowUp) or (not isUp and allowDn)
     if allowDir
-        // ----- تصميم الرسالة الاحترافي -----
-        head     = isUp ? "🟢 ▲ صعود" : "🔴 ▼ هبوط"
+        // ----- رسالة من سطر واحد واضحة على شاشة القفل بدون فتح -----
+        head     = isUp ? "🟢▲" : "🔴▼"
         priceStr = str.tostring(priceSrc, format.mintick)
         diffStr  = (isUp ? "+" : "") + str.tostring(diff, format.mintick)
-        timeStr  = na(lastAlertTime) ? "" : "\n⏱️ منذ " + str.tostring(math.round((timenow - lastAlertTime) / 60000)) + " دقيقة"
-        msg      = head + "  |  " + syminfo.ticker + "\n" +
-                   "💰 السعر: " + priceStr + " $\n" +
-                   "📊 التغيّر: " + diffStr + " $ منذ آخر تنبيه" + timeStr
+        msg      = head + " " + syminfo.ticker + "  " + priceStr + "$  (" + diffStr + "$)"
         alert(msg, af)
         lastAlertPrice := priceSrc
         lastAlertTime  := timenow
